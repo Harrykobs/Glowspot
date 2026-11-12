@@ -4,7 +4,7 @@ services:
     name: glowspot-referral
     runtime: python
     plan: starter
-           rootDir: glowspot-referral
+    rootDir: glowspot-referral
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn wsgi:app --workers 2 --timeout 60
     healthCheckPath: /healthz
