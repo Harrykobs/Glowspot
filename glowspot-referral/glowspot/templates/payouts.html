@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Payouts{% endblock %}
+{% block content %}
+<section class="card"><h1>Commission payouts</h1>
+  {% if rows %}<div class="tbl-wrap"><table>
+    <thead><tr><th>Date</th><th>Customer</th><th>Phone</th><th class="r">Amount</th><th>Method</th><th>Recorded by</th><th>Note</th></tr></thead>
+    <tbody>{% for p in rows %}<tr><td>{{ p.paid_on|dmy }}</td><td><a href="{{ url_for('main.customer', cid=p.referrer_id) }}">{{ p.name }}</a></td><td>{{ p.phone|phone }}</td>
+    <td class="r">{{ p.amount|num }}</td><td>{{ p.method }}</td><td>{{ p.by_name }}</td><td>{{ p.note or '' }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No payouts recorded yet.</p>{% endif %}
+</section>
+{% endblock %}

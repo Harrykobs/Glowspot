@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ rep.title }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{{ rep.title }}</h1>
+  <form method="get" class="filters">
+    <label>From<input type="date" name="start" value="{{ rep.start }}" required></label>
+    <label>To<input type="date" name="end" value="{{ rep.end }}" required></label>
+    {% if rep.key == 'trend' %}<label>Group by<select name="group">{% for g_ in ['day','week','month'] %}<option {{ 'selected' if group == g_ }}>{{ g_ }}</option>{% endfor %}</select></label>{% endif %}
+    <button class="btn" type="submit">Update</button>
+    <a class="btn" href="{{ url_for('main.report_export', key=rep.key, fmt='xlsx', start=rep.start, end=rep.end, group=group) }}">Export Excel</a>
+    <a class="btn" href="{{ url_for('main.report_export', key=rep.key, fmt='pdf', start=rep.start, end=rep.end, group=group) }}">Export PDF</a>
+  </form>
+  {% if rep.summary %}<ul class="summary">{% for label, val in rep.summary %}<li><strong>{{ label }}</strong> {{ val }}</li>{% endfor %}</ul>{% endif %}
+  {% if rep.rows %}<div class="tbl-wrap"><table>
+    <thead><tr>{% for c in rep.columns %}<th{% if loop.index0 in rep.money %} class="r"{% endif %}>{{ c }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for row in rep.rows %}<tr>{% for v in row %}<td{% if loop.index0 in rep.money %} class="r"{% endif %}>{% if v is number %}{{ v|num }}{% else %}{{ v }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No records for this period.</p>{% endif %}
+</section>
+{% endblock %}

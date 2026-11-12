@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Audit log</h1>
+  <form method="get" class="filters">
+    <label>Action<select name="action"><option value="">All</option>{% for x in actions %}<option {{ 'selected' if a.get('action') == x }}>{{ x }}</option>{% endfor %}</select></label>
+    <label>Search<input name="q" value="{{ a.get('q', '') }}" placeholder="User, detail or reason"></label>
+    <button class="btn" type="submit">Filter</button>
+  </form>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>When</th><th>User</th><th>Action</th><th>Detail</th><th>Reason</th></tr></thead>
+    <tbody>{% for r in rows %}<tr><td>{{ r.created_at|dt }}</td><td>{{ r.username or 'system' }}</td><td>{{ r.action }}</td><td>{{ r.detail or '' }}</td><td>{{ r.reason or '' }}</td></tr>{% endfor %}</tbody></table></div>
+  <p class="pager">{% if page > 1 %}<a href="{{ url_for('main.audit_log', page=page-1, action=a.get('action',''), q=a.get('q','')) }}">Newer</a>{% endif %}
+    Page {{ page }} {% if rows|length == 100 %}<a href="{{ url_for('main.audit_log', page=page+1, action=a.get('action',''), q=a.get('q','')) }}">Older</a>{% endif %}</p>
+</section>
+{% endblock %}

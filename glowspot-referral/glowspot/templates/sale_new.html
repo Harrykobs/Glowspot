@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% from "_m.html" import csrf with context %}
+{% block title %}Record sale{% endblock %}
+{% block content %}
+{% set kind = form.get('kind', 'skin') %}
+<section class="card narrow">
+  <h1>Record service or package</h1>
+  <p>For <a href="{{ url_for('main.customer', cid=c.id) }}">{{ c.name }}</a> ({{ c.phone|phone }})</p>
+  <form method="post" id="sale-form" class="stack">{{ csrf() }}
+    <fieldset>
+      <legend>What are they buying?</legend>
+      <label class="choice"><input type="radio" name="kind" value="skin" {{ 'checked' if kind == 'skin' }}> Skin analysis</label>
+      <label class="choice"><input type="radio" name="kind" value="package" {{ 'checked' if kind == 'package' }}> Package</label>
+    </fieldset>
+    <div class="skin-only panel">
+      <p class="price">{{ quote.price|tzs }} <span class="tag">{{ quote.label }}</span></p>
+      {% if quote.is_first %}<p>First skin analysis.</p>
+      {% elif quote.qualifies %}<p>Returning-customer price: {{ quote.referrals }} qualifying referrals.</p>
+      {% else %}<p>Standard price. {{ quote.remaining }} more qualifying referral(s) needed for {{ quote.returning_price|tzs }}.</p>{% endif %}
+      {% if quote.open_sale_id %}<p class="note">An earlier skin analysis is unpaid. <a href="{{ url_for('main.sale', sid=quote.open_sale_id) }}">Record its payment instead.</a></p>{% endif %}
+    </div>
+    <div class="pkg-only">
+      <label>Package
+        <select name="package_id" id="package">
+          <option value="">Choose a package</option>
+          {% for p in packages %}<option value="{{ p.id }}" data-price="{{ p.price }}" {{ 'selected' if form.get('package_id') == p.id|string }}>{{ p.name }} - {{ p.price|tzs }}</option>{% endfor %}
+        </select></label>
+      {% if not packages %}<p class="note">No packages yet. A manager can add them under Manage, Packages.</p>{% endif %}
+      <label>Discount (TZS)<input name="discount" id="discount" inputmode="numeric" value="{{ form.get('discount', '0') }}"></label>
+    </div>
+    <p class="due">Amount due: <strong id="due" data-skin="{{ quote.price }}">{{ quote.price|tzs }}</strong></p>
+    <label>Amount paid now (TZS)<input name="paid" id="paid" inputmode="numeric" value="{{ form.get('paid', '') }}" placeholder="0"></label>
+    <label>Payment method<select name="method">{% for m in METHODS %}<option {{ 'selected' if form.get('method') == m }}>{{ m }}</option>{% endfor %}</select></label>
+    <label>Service date<input type="date" name="date" value="{{ form.get('date', today) }}" max="{{ today }}" required></label>
+    <p class="hint">Commission is only created once payment is recorded. Anything unpaid can be paid later in instalments.</p>
+    <button class="btn primary big" type="submit">Record and confirm payment</button>
+  </form>
+</section>
+{% endblock %}

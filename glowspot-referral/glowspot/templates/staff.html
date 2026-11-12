@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% from "_m.html" import csrf with context %}
+{% block title %}Staff accounts{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Staff accounts</h1>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Name</th><th>Username</th><th>Role</th><th>Status</th><th>Last login</th><th>Manage</th></tr></thead>
+    <tbody>{% for u in users %}<tr{% if not u.active %} class="void"{% endif %}>
+      <td>{{ u.full_name }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ 'Active' if u.active else 'Disabled' }}</td><td>{{ u.last_login|dt if u.last_login else 'Never' }}</td>
+      <td><details><summary>Edit</summary>
+        <form method="post" action="{{ url_for('main.staff_update', uid=u.id) }}" class="stack">{{ csrf() }}
+          <label>Name<input name="full_name" value="{{ u.full_name }}" required></label>
+          <label>Role<select name="role"><option value="staff" {{ 'selected' if u.role == 'staff' }}>Staff</option><option value="manager" {{ 'selected' if u.role == 'manager' }}>Manager</option></select></label>
+          <label>Account<select name="active"><option value="1" {{ 'selected' if u.active }}>Active</option><option value="0" {{ 'selected' if not u.active }}>Disabled</option></select></label>
+          <button class="btn" type="submit">Save</button></form>
+        <form method="post" action="{{ url_for('main.staff_password', uid=u.id) }}" class="stack" data-confirm="Reset this password?">{{ csrf() }}
+          <label>New temporary password<input name="password" type="text" autocomplete="off" required minlength="8"></label>
+          <button class="btn" type="submit">Reset password</button></form>
+      </details></td></tr>{% endfor %}</tbody></table></div>
+</section>
+<section class="card narrow">
+  <h2>Add a staff account</h2>
+  <form method="post" class="stack">{{ csrf() }}
+    <label>Full name<input name="full_name" required></label>
+    <label>Username<input name="username" required autocomplete="off"></label>
+    <label>Role<select name="role"><option value="staff">Staff</option><option value="manager">Manager</option></select></label>
+    <label>Temporary password<input name="password" type="text" required minlength="8" autocomplete="off"></label>
+    <p class="hint">They will be asked to choose their own password at first login.</p>
+    <button class="btn primary" type="submit">Create account</button>
+  </form>
+</section>
+{% endblock %}

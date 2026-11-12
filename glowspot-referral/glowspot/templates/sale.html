@@ -1,0 +1,60 @@
+{% extends "base.html" %}{% from "_m.html" import csrf, badge with context %}
+{% block title %}{{ s.item_name }}{% endblock %}
+{% block content %}
+<section class="card head">
+  <div>
+    <h1>{{ s.item_name }}{% if s.status == 'voided' %} <span class="badge b-reversed">voided</span>{% endif %}</h1>
+    <p>For <a href="{{ url_for('main.customer', cid=c.id) }}">{{ c.name }}</a> on {{ s.service_date|dmy }}. Recorded by {{ s.by_name }}.</p>
+    {% if s.price_note %}<p class="tag">{{ s.price_note }}</p>{% endif %}
+    {% if s.status == 'voided' %}<p class="note">Voided: {{ s.void_reason }}</p>{% endif %}
+  </div>
+</section>
+<section class="stats">
+  <div class="stat"><span class="n">{{ s.original_price|tzs }}</span><span>price</span></div>
+  <div class="stat"><span class="n">{{ s.discount|tzs }}</span><span>discount</span></div>
+  <div class="stat"><span class="n">{{ paid|tzs }}</span><span>collected of {{ s.amount_due|tzs }}</span></div>
+  <div class="stat strong"><span class="n">{{ balance|tzs }}</span><span>balance</span></div>
+</section>
+
+<section class="card">
+  <h2>Commission from this sale</h2>
+  {% if comms %}<div class="tbl-wrap"><table>
+    <thead><tr><th>Referrer</th><th>Reason</th><th class="r">Paid by customer</th><th>Rate</th><th class="r">Commission</th><th>Status</th></tr></thead>
+    <tbody>{% for m in comms %}<tr><td><a href="{{ url_for('main.customer', cid=m.referrer_id) }}">{{ m.referrer_name }}</a> ({{ m.referrer_phone|phone }})</td>
+      <td>{% if m.kind == 'skin_reward' %}First skin analysis reward{% elif m.kind == 'package_commission' %}Package commission{% else %}Adjustment ({{ m.rate_label }}){% endif %}</td>
+      <td class="r">{{ m.base_amount|num }}</td><td>{{ m.rate_label }}</td><td class="r">{{ m.amount|tzs }}</td><td>{{ badge(m.status) }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">{% if c.referrer_id %}No commission yet. It is created when a qualifying payment is confirmed.{% else %}This customer was not referred, so there is no commission.{% endif %}</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Payments</h2>
+  {% if pays %}<div class="tbl-wrap"><table>
+    <thead><tr><th>Date</th><th class="r">Amount</th><th>Method</th><th>Recorded by</th><th>Status</th>{% if g.user.role == 'manager' %}<th>Reverse</th>{% endif %}</tr></thead>
+    <tbody>{% for p in pays %}<tr{% if p.status == 'reversed' %} class="void"{% endif %}>
+      <td>{{ p.paid_on|dmy }}</td><td class="r">{{ p.amount|num }}</td><td>{{ p.method }}</td><td>{{ p.by_name }}</td>
+      <td>{{ 'Confirmed' if p.status == 'confirmed' else 'Reversed: ' ~ p.reversed_reason }}</td>
+      {% if g.user.role == 'manager' %}<td>{% if p.status == 'confirmed' %}
+        <details><summary>Reverse</summary>
+          <form method="post" action="{{ url_for('main.payment_reverse', pid=p.id) }}" data-confirm="Reverse this payment and its commission?">{{ csrf() }}
+            <input name="reason" placeholder="Reason" required minlength="5" maxlength="300"><button class="btn danger" type="submit">Reverse payment</button></form>
+        </details>{% endif %}</td>{% endif %}</tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No payment recorded yet.</p>{% endif %}
+  {% if s.status == 'active' and balance > 0 %}
+  <h3>Record another payment</h3>
+  <form method="post" action="{{ url_for('main.sale_payment', sid=s.id) }}" class="stack">{{ csrf() }}
+    <label>Amount (TZS, up to {{ balance|num }})<input name="amount" inputmode="numeric" required></label>
+    <label>Method<select name="method">{% for m in METHODS %}<option>{{ m }}</option>{% endfor %}</select></label>
+    <label>Date<input type="date" name="date" value="{{ today }}" max="{{ today }}" required></label>
+    <button class="btn primary" type="submit">Record payment</button>
+  </form>{% endif %}
+</section>
+
+{% if g.user.role == 'manager' and s.status == 'active' %}
+<section class="card">
+  <h2>Void this sale (manager)</h2>
+  <p>Voiding reverses every payment and commission linked to this sale. It cannot be undone.</p>
+  <form method="post" action="{{ url_for('main.sale_void', sid=s.id) }}" class="stack" data-confirm="Void this whole sale?">{{ csrf() }}
+    <label>Reason<input name="reason" required minlength="5" maxlength="300"></label>
+    <button class="btn danger" type="submit">Void sale</button></form>
+</section>{% endif %}
+{% endblock %}

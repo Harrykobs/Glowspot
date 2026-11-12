@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<section class="finder">
+  <h1>Find a customer by phone number</h1>
+  <form method="get" action="{{ url_for('main.customers') }}" class="finder-form">
+    <input name="q" type="tel" inputmode="tel" placeholder="0786 189 844" aria-label="Customer phone number" autofocus required>
+    <button class="btn primary big" type="submit">Find customer</button>
+  </form>
+  <p><a href="{{ url_for('main.customer_new') }}">Register a new customer</a></p>
+</section>
+{% if stats %}
+<section class="stats">
+  <div class="stat"><span class="n">{{ stats.today|tzs }}</span><span>collected today</span></div>
+  <div class="stat"><span class="n">{{ stats.month|tzs }}</span><span>collected this month</span></div>
+  <a class="stat" href="{{ url_for('main.commissions') }}"><span class="n">{{ stats.pending_n }}</span><span>commissions to approve ({{ stats.pending_amt|tzs }})</span></a>
+  <div class="stat"><span class="n">{{ stats.approved_amt|tzs }}</span><span>approved, ready to pay out</span></div>
+</section>
+{% endif %}
+<section class="card">
+  <h2>{{ 'Latest transactions' if stats else 'Your latest transactions' }}</h2>
+  {% if recent %}
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Date</th><th>Customer</th><th>Item</th><th class="r">Due</th><th class="r">Paid</th>{% if stats %}<th>Recorded by</th>{% endif %}</tr></thead>
+    <tbody>{% for r in recent %}
+    <tr><td>{{ r.service_date|dmy }}</td><td><a href="{{ url_for('main.sale', sid=r.id) }}">{{ r.name }}</a></td><td>{{ r.item_name }}</td>
+    <td class="r">{{ r.amount_due|num }}</td><td class="r">{{ r.paid|num }}</td>{% if stats %}<td>{{ r.by_name }}</td>{% endif %}</tr>
+    {% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No transactions yet. Find or register a customer to record the first one.</p>{% endif %}
+</section>
+{% endblock %}

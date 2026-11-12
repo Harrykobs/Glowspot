@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% from "_m.html" import csrf with context %}
+{% block title %}Register customer{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Register a new customer</h1>
+  {% if dup %}<p><a class="btn" href="{{ url_for('main.customer', cid=dup) }}">Open the existing account</a></p>{% endif %}
+  <form method="post">{{ csrf() }}
+    <label>Full name<input name="name" value="{{ form.get('name', '') }}" required maxlength="80" autocomplete="off"></label>
+    <label>Phone number (this is their referral code)<input id="phone" name="phone" type="tel" inputmode="tel" value="{{ form.get('phone', '') }}" required placeholder="0786 189 844"></label>
+    <fieldset>
+      <legend>Did someone refer this customer?</legend>
+      <label>Referrer's phone number (leave empty if nobody)
+        <input id="referrer_phone" name="referrer_phone" type="tel" inputmode="tel" value="{{ form.get('referrer_phone', '') }}" placeholder="0712 345 678"></label>
+      <p id="ref-result" class="hint" aria-live="polite"></p>
+    </fieldset>
+    <button class="btn primary" type="submit">Register customer</button>
+  </form>
+</section>
+{% endblock %}

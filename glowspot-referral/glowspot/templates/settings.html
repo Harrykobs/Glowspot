@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% from "_m.html" import csrf with context %}
+{% block title %}Prices and rates{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Prices and commission settings</h1>
+  <p>Changes apply to future transactions only. Every change is recorded with your reason.</p>
+  <form method="post" class="stack">{{ csrf() }}
+    {% for r in rows %}<label>{{ r.label }}<input name="{{ r.key }}" value="{{ r.value }}" inputmode="decimal" required></label>{% endfor %}
+    <label>Reason for the change<input name="reason" required minlength="5" maxlength="300"></label>
+    <button class="btn primary" type="submit">Save settings</button>
+  </form>
+</section>
+<section class="card"><h2>Change history</h2>
+  {% if hist %}<div class="tbl-wrap"><table><thead><tr><th>When</th><th>Setting</th><th>From</th><th>To</th><th>Reason</th><th>By</th></tr></thead>
+  <tbody>{% for h in hist %}<tr><td>{{ h.changed_at|dt }}</td><td>{{ h.label }}</td><td>{{ h.old_value }}</td><td>{{ h.new_value }}</td><td>{{ h.reason }}</td><td>{{ h.by_name }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No changes yet.</p>{% endif %}</section>
+{% endblock %}

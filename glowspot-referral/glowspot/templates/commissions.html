@@ -1,0 +1,30 @@
+{% extends "base.html" %}{% from "_m.html" import csrf, badge with context %}
+{% block title %}Commissions{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Commission ledger</h1>
+  <form method="get" class="filters">
+    <label>Status<select name="status">{% for s in ['Pending','Approved','Paid','Reversed','all'] %}<option value="{{ s }}" {{ 'selected' if status == s }}>{{ s|capitalize }}</option>{% endfor %}</select></label>
+    <label>Type<select name="kind"><option value="">All</option><option value="skin_reward" {{ 'selected' if a.get('kind') == 'skin_reward' }}>Skin analysis reward</option><option value="package_commission" {{ 'selected' if a.get('kind') == 'package_commission' }}>Package commission</option><option value="adjustment" {{ 'selected' if a.get('kind') == 'adjustment' }}>Adjustment</option></select></label>
+    <label>Referrer<input name="q" value="{{ a.get('q', '') }}" placeholder="Name or phone"></label>
+    <label>From<input type="date" name="start" value="{{ a.get('start', '') }}"></label>
+    <label>To<input type="date" name="end" value="{{ a.get('end', '') }}"></label>
+    <button class="btn" type="submit">Filter</button>
+  </form>
+  {% if rows %}
+  <form method="post" action="{{ url_for('main.commissions_approve') }}">{{ csrf() }}
+    <input type="hidden" name="back" value="{{ request.full_path.rstrip('?') }}">
+    <div class="tbl-wrap"><table>
+      <thead><tr><th></th><th>Earned</th><th>Referrer</th><th>Referred customer</th><th>Service / package</th><th class="r">Paid</th><th>Rate</th><th class="r">Commission</th><th>Status</th></tr></thead>
+      <tbody>{% for m in rows %}<tr>
+        <td>{% if m.status == 'Pending' %}<input type="checkbox" name="ids" value="{{ m.id }}" aria-label="Select commission {{ m.id }}">{% endif %}</td>
+        <td>{{ m.earned_at|dt }}</td>
+        <td><a href="{{ url_for('main.customer', cid=m.referrer_id) }}">{{ m.referrer_name }}</a><br><span class="sub">{{ m.referrer_phone|phone }}</span></td>
+        <td>{{ m.referred_name }}</td><td>{{ m.item_name }}{% if m.kind == 'adjustment' %} (reversal){% endif %}</td>
+        <td class="r">{{ m.base_amount|num }}</td><td>{{ m.rate_label }}</td><td class="r">{{ m.amount|tzs }}</td><td>{{ badge(m.status) }}</td></tr>{% endfor %}</tbody></table></div>
+    {% if status in ('Pending', 'all') %}<button class="btn primary" type="submit">Approve selected</button>{% endif %}
+  </form>
+  <p class="hint">To pay out approved commission, open the referrer's account and choose Record payout.</p>
+  {% else %}<p class="empty">No commissions match these filters.</p>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% from "_m.html" import csrf with context %}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{% block title %}Glowspot{% endblock %} - Glowspot Cosmetics</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</head>
+<body>
+{% if banner %}<div class="banner">{{ banner }}</div>{% endif %}
+<header class="top">
+  <a class="brand" href="{{ url_for('main.home') }}"><span class="dot"></span>Glowspot</a>
+  {% if g.user %}
+  <nav class="nav" aria-label="Main">
+    <a href="{{ url_for('main.home') }}">Home</a>
+    <a href="{{ url_for('main.customers') }}">Customers</a>
+    {% if g.user.role == 'manager' %}
+    <a href="{{ url_for('main.commissions') }}">Commissions</a>
+    <a href="{{ url_for('main.reports_index') }}">Reports</a>
+    <details class="more"><summary>Manage</summary>
+      <div class="menu">
+        <a href="{{ url_for('main.payouts') }}">Payouts</a>
+        <a href="{{ url_for('main.staff') }}">Staff accounts</a>
+        <a href="{{ url_for('main.settings') }}">Prices and rates</a>
+        <a href="{{ url_for('main.packages') }}">Packages</a>
+        <a href="{{ url_for('main.audit_log') }}">Audit log</a>
+        <a href="{{ url_for('main.backup') }}">Backup</a>
+      </div>
+    </details>
+    {% endif %}
+  </nav>
+  <div class="who">
+    <span>{{ g.user.full_name }} ({{ g.user.role }})</span>
+    <a href="{{ url_for('main.change_password') }}">Password</a>
+    <form method="post" action="{{ url_for('main.logout') }}">{{ csrf() }}<button class="link" type="submit">Log out</button></form>
+  </div>
+  {% endif %}
+</header>
+<main class="wrap">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="flash f-{{ cat }}" role="{{ 'alert' if cat == 'error' else 'status' }}">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="foot">Glowspot Cosmetics, EACLC Ubungo, Dar es Salaam. Customer data is confidential.</footer>
+</body>
+</html>

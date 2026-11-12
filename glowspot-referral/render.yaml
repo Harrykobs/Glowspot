@@ -1,0 +1,30 @@
+# Render blueprint. SQLite needs a persistent disk, which Render only offers on paid instances.
+services:
+  - type: web
+    name: glowspot-referral
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --workers 2 --timeout 60
+    healthCheckPath: /healthz
+    disk:
+      name: glowspot-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "1"
+      - key: DATABASE_PATH
+        value: /var/data/glowspot.db
+      - key: SECRET_KEY
+        generateValue: true
+      - key: INITIAL_ADMIN_USERNAME
+        value: admin
+      - key: INITIAL_ADMIN_PASSWORD
+        sync: false        # you type this in the Render dashboard; never commit it
+      - key: SEED_DEMO
+        value: "1"         # test site only: adds synthetic demo data. Remove for real use.
+      - key: TEST_BANNER
+        value: "TEST SITE - synthetic data only"

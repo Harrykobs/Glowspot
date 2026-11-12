@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% from "_m.html" import csrf with context %}
+{% block title %}Record payout{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Record payout for {{ c.name }}</h1>
+  <p>{{ c.phone|phone }}. Unpaid balance {{ summary.unpaid|tzs }}, of which {{ summary.approved|tzs }} is approved. The system records the payout; it does not send money.</p>
+  {% if rows %}
+  <form method="post" class="stack">{{ csrf() }}
+    <div class="tbl-wrap"><table>
+      <thead><tr><th></th><th>Earned</th><th>Referred customer</th><th>For</th><th class="r">Amount</th></tr></thead>
+      <tbody>{% for m in rows %}<tr><td><input type="checkbox" name="ids" value="{{ m.id }}" checked aria-label="Include commission {{ m.id }}"></td>
+        <td>{{ m.earned_at|dt }}</td><td>{{ m.referred_name }}</td><td>{{ m.item_name }}{% if m.kind == 'adjustment' %} (reversal){% endif %}</td><td class="r">{{ m.amount|tzs }}</td></tr>{% endfor %}</tbody></table></div>
+    <label>Method<select name="method">{% for m in METHODS %}<option>{{ m }}</option>{% endfor %}</select></label>
+    <label>Payout date<input type="date" name="date" value="{{ today }}" max="{{ today }}" required></label>
+    <label>Note (optional)<input name="note" maxlength="200"></label>
+    <button class="btn primary" type="submit">Record payout</button>
+  </form>
+  {% else %}<p class="empty">No approved commission waiting to be paid. Approve pending commission first.</p>{% endif %}
+</section>
+{% endblock %}

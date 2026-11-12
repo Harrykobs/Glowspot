@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% from "_m.html" import csrf with context %}
+{% block title %}Packages{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Packages</h1>
+  {% if rows %}<div class="tbl-wrap"><table><thead><tr><th>Name</th><th class="r">Price (TZS)</th><th>Status</th><th>Edit</th></tr></thead>
+  <tbody>{% for p in rows %}<tr{% if not p.active %} class="void"{% endif %}><td>{{ p.name }}</td><td class="r">{{ p.price|num }}</td><td>{{ 'Active' if p.active else 'Hidden' }}</td>
+  <td><details><summary>Edit</summary><form method="post" class="stack">{{ csrf() }}<input type="hidden" name="id" value="{{ p.id }}">
+    <label>Name<input name="name" value="{{ p.name }}" required></label>
+    <label>Price (TZS)<input name="price" value="{{ p.price }}" inputmode="numeric" required></label>
+    <label>Status<select name="active"><option value="1" {{ 'selected' if p.active }}>Active</option><option value="0" {{ 'selected' if not p.active }}>Hidden</option></select></label>
+    <button class="btn" type="submit">Save</button></form></details></td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No packages yet. Add the first one below.</p>{% endif %}
+</section>
+<section class="card narrow"><h2>Add a package</h2>
+  <form method="post" class="stack">{{ csrf() }}
+    <label>Name<input name="name" required></label>
+    <label>Price (TZS)<input name="price" inputmode="numeric" required></label>
+    <button class="btn primary" type="submit">Add package</button></form></section>
+{% endblock %}

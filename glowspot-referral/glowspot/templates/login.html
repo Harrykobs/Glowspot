@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% from "_m.html" import csrf with context %}
+{% block title %}Log in{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Log in</h1>
+  <form method="post" autocomplete="on">{{ csrf() }}
+    <label>Username<input name="username" value="{{ username }}" autocomplete="username" required autofocus></label>
+    <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Log in</button>
+  </form>
+</section>
+{% endblock %}

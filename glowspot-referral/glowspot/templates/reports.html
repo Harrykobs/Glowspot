@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Reports</h1>
+  <form method="get" class="filters">
+    <label>From<input type="date" name="start" value="{{ start }}" required></label>
+    <label>To<input type="date" name="end" value="{{ end }}" required></label>
+    <button class="btn" type="submit">Apply dates</button>
+  </form>
+  <ul class="list">
+    {% for key, (title, fn) in reports.items() %}
+    <li><a href="{{ url_for('main.report', key=key, start=start, end=end) }}">{{ title }}</a>
+      <span class="sub"><a href="{{ url_for('main.report_export', key=key, fmt='xlsx', start=start, end=end) }}">Excel</a> | <a href="{{ url_for('main.report_export', key=key, fmt='pdf', start=start, end=end) }}">PDF</a></span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

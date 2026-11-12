@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Customers{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Customers</h1>
+  <form method="get" class="inline-form">
+    <input name="q" type="search" value="{{ q }}" placeholder="{{ 'Phone number or name' if g.user.role == 'manager' else 'Phone number (at least 4 digits)' }}" aria-label="Search" required>
+    <button class="btn primary" type="submit">Search</button>
+    {% if g.user.role == 'manager' and q %}<a class="btn" href="{{ url_for('main.customers') }}">Show all</a>{% endif %}
+  </form>
+  {% if rows %}
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Name</th><th>Phone</th><th>Status</th><th>Registered</th>{% if g.user.role == 'manager' %}<th class="r">Unpaid commission</th>{% endif %}</tr></thead>
+    <tbody>{% for r in rows %}
+    <tr><td><a href="{{ url_for('main.customer', cid=r.id) }}">{{ r.name }}</a>{% if r.is_demo %} <span class="badge b-demo">demo</span>{% endif %}</td>
+    <td>{{ r.phone|phone }}</td><td>{{ info[r.id].status|capitalize }}</td><td>{{ r.registered_at|dt }}</td>
+    {% if g.user.role == 'manager' %}<td class="r">{{ info[r.id].unpaid|num }}</td>{% endif %}</tr>
+    {% endfor %}</tbody></table></div>
+  {% if total > 50 %}<p class="pager">
+    {% if page > 1 %}<a href="{{ url_for('main.customers', page=page-1) }}">Previous</a>{% endif %}
+    Page {{ page }} of {{ ((total - 1) // 50) + 1 }}
+    {% if page * 50 < total %}<a href="{{ url_for('main.customers', page=page+1) }}">Next</a>{% endif %}</p>{% endif %}
+  {% elif q %}
+  <p class="empty">No customer matches "{{ q }}".</p>
+  <p><a class="btn primary" href="{{ url_for('main.customer_new', phone=q) }}">Register this customer</a></p>
+  {% elif g.user.role != 'manager' %}<p class="empty">Type a phone number to find a customer.</p>
+  {% else %}<p class="empty">No customers registered yet.</p>{% endif %}
+</section>
+{% endblock %}

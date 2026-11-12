@@ -1,0 +1,80 @@
+{% extends "base.html" %}{% from "_m.html" import csrf, badge with context %}
+{% block title %}{{ c.name }}{% endblock %}
+{% block content %}
+<section class="card head">
+  <div>
+    <h1>{{ c.name }}{% if c.is_demo %} <span class="badge b-demo">demo</span>{% endif %}</h1>
+    <p class="code">Referral code: <strong>{{ c.phone|phone }}</strong></p>
+    <p>{{ status|capitalize }} customer. Registered {{ c.registered_at|dt }}.
+      {% if referrer %}Referred by <a href="{{ url_for('main.customer', cid=referrer.id) }}">{{ referrer.name }}</a> ({{ referrer.phone|phone }}).{% else %}No referrer.{% endif %}</p>
+  </div>
+  <a class="btn primary big" href="{{ url_for('main.sale_new', cid=c.id) }}">Record service or package</a>
+</section>
+
+<section class="card">
+  <h2>Skin analysis price today</h2>
+  <p class="price">{{ quote.price|tzs }} <span class="tag">{{ quote.label }}</span></p>
+  {% if quote.is_first %}<p>This is their first skin analysis.</p>
+  {% elif quote.qualifies %}<p>Qualifies for the returning-customer price: {{ quote.referrals }} qualifying referrals (needs {{ quote.needed }}).</p>
+  {% else %}<p>Returning-customer price needs {{ quote.needed }} qualifying referrals. They have {{ quote.referrals }}; {{ quote.remaining }} more to go.</p>{% endif %}
+  {% if quote.open_sale_id %}<p class="note">An earlier skin analysis is still unpaid: <a href="{{ url_for('main.sale', sid=quote.open_sale_id) }}">open it</a> to record the payment.</p>{% endif %}
+</section>
+
+<section class="stats">
+  <div class="stat"><span class="n">{{ summary.earned|tzs }}</span><span>commission earned</span></div>
+  <div class="stat"><span class="n">{{ summary.paid|tzs }}</span><span>commission paid</span></div>
+  <div class="stat strong"><span class="n">{{ summary.unpaid|tzs }}</span><span>unpaid balance</span></div>
+  <div class="stat"><span class="n">{{ qualifying }}</span><span>qualifying customers referred</span></div>
+</section>
+{% if g.user.role == 'manager' and summary.approved > 0 %}<p><a class="btn" href="{{ url_for('main.payout_new', cid=c.id) }}">Record payout ({{ summary.approved|tzs }} approved)</a></p>{% endif %}
+
+<section class="card">
+  <h2>Purchases</h2>
+  {% if sales %}<div class="tbl-wrap"><table>
+    <thead><tr><th>Date</th><th>Item</th><th class="r">Price</th><th class="r">Discount</th><th class="r">Due</th><th class="r">Paid</th><th>Recorded by</th><th></th></tr></thead>
+    <tbody>{% for s in sales %}<tr{% if s.status == 'voided' %} class="void"{% endif %}>
+      <td>{{ s.service_date|dmy }}</td><td>{{ s.item_name }}{% if s.status == 'voided' %} (voided){% endif %}</td>
+      <td class="r">{{ s.original_price|num }}</td><td class="r">{{ s.discount|num }}</td><td class="r">{{ s.amount_due|num }}</td><td class="r">{{ s.paid|num }}</td>
+      <td>{{ s.by_name }}</td><td><a href="{{ url_for('main.sale', sid=s.id) }}">Open</a></td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No purchases yet.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Customers referred by {{ c.name }}</h2>
+  {% if referred %}<div class="tbl-wrap"><table>
+    <thead><tr><th>Name</th><th>Phone</th><th>Registered</th><th>Qualifying paid visit</th></tr></thead>
+    <tbody>{% for r in referred %}<tr><td><a href="{{ url_for('main.customer', cid=r.id) }}">{{ r.name }}</a></td><td>{{ r.phone|phone }}</td>
+      <td>{{ r.registered_at|dt }}</td><td>{{ (r.qualified_on|dmy) if r.qualified_on else 'Not yet' }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">Nobody referred yet.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Commission history</h2>
+  {% if ledger %}<div class="tbl-wrap"><table>
+    <thead><tr><th>Earned</th><th>Referred customer</th><th>Reason</th><th class="r">Paid by customer</th><th>Rate</th><th class="r">Commission</th><th>Status</th></tr></thead>
+    <tbody>{% for m in ledger %}<tr>
+      <td>{{ m.earned_at|dt }}</td><td>{{ m.referred_name }}</td>
+      <td>{% if m.kind == 'skin_reward' %}First skin analysis reward{% elif m.kind == 'package_commission' %}Package: {{ m.item_name }}{% else %}Adjustment ({{ m.rate_label }}){% endif %}</td>
+      <td class="r">{{ m.base_amount|num }}</td><td>{{ m.rate_label }}</td><td class="r">{{ m.amount|tzs }}</td>
+      <td>{{ badge(m.status) }}{% if m.reversed_at and m.status == 'Paid' %} <span class="tag">reversed</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty">No commission yet.</p>{% endif %}
+  {% if payouts %}<h3>Payouts</h3><div class="tbl-wrap"><table>
+    <thead><tr><th>Date</th><th class="r">Amount</th><th>Method</th><th>Recorded by</th><th>Note</th></tr></thead>
+    <tbody>{% for p in payouts %}<tr><td>{{ p.paid_on|dmy }}</td><td class="r">{{ p.amount|num }}</td><td>{{ p.method }}</td><td>{{ p.by_name }}</td><td>{{ p.note or '' }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</section>
+
+{% if g.user.role == 'manager' %}
+<section class="card">
+  <h2>Referral link (manager)</h2>
+  <p>A referral link can only be changed by a manager, with a reason. Past commission stays with the original referrer; new payments use the new link.</p>
+  <form method="post" action="{{ url_for('main.customer_referrer', cid=c.id) }}" class="stack">{{ csrf() }}
+    <label>New referrer's phone number (leave empty to remove the link)<input name="referrer_phone" type="tel" inputmode="tel"></label>
+    <label>Reason<input name="reason" required minlength="5" maxlength="300"></label>
+    <button class="btn" type="submit">Change referral link</button>
+  </form>
+  {% if changes %}<h3>Change history</h3><div class="tbl-wrap"><table>
+    <thead><tr><th>When</th><th>From</th><th>To</th><th>Reason</th><th>By</th></tr></thead>
+    <tbody>{% for h in changes %}<tr><td>{{ h.changed_at|dt }}</td><td>{{ h.old_name or 'None' }}</td><td>{{ h.new_name or 'None' }}</td><td>{{ h.reason }}</td><td>{{ h.by_name }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

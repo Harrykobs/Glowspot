@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% from "_m.html" import csrf with context %}
+{% block title %}Backup{% endblock %}
+{% block content %}
+<section class="card narrow">
+  <h1>Backup</h1>
+  <p>Download a complete copy of the database. It contains customer phone numbers, so keep it somewhere private. Do this regularly (for example every week) and keep copies off this server.</p>
+  <form method="post" action="{{ url_for('main.backup_download') }}">{{ csrf() }}<button class="btn primary" type="submit">Download backup</button></form>
+  <p class="hint">To restore after a failure, follow the Restore section of the Administrator guide (stop the app, replace the database file, start the app).</p>
+</section>
+{% endblock %}
