@@ -252,7 +252,7 @@ def register_customer(db, user, name, phone_raw, referrer_phone_raw="", is_demo=
         cur = db.execute(
             "INSERT INTO customers(name,phone,referrer_id,registered_at,registered_by,is_demo) VALUES(?,?,?,?,?,?)",
             (name, phone, referrer_id, now_utc(), user["id"], 1 if is_demo else 0))
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         ex = db.execute("SELECT id,name FROM customers WHERE phone=?", (phone,)).fetchone()
         raise RuleError("This phone number already belongs to another customer.", customer_id=ex["id"] if ex else None)
     audit(db, user, "customer_registered", "customer", cur.lastrowid,
@@ -612,7 +612,7 @@ def save_package(db, user, package_id, name, price_raw, active):
         else:
             cur = db.execute("INSERT INTO packages(name,price,active) VALUES(?,?,1)", (name, price))
             audit(db, user, "package_created", "package", cur.lastrowid, f"{name} {price}")
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         raise RuleError("A package with that name already exists.")
 
 
