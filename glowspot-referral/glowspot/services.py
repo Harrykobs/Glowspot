@@ -277,7 +277,7 @@ def search_customers(db, q, user, limit=15):
         rows = db.execute("SELECT * FROM customers WHERE phone LIKE ? ESCAPE '\\' ORDER BY name LIMIT ?",
                           ("%" + like_escape(digits) + "%", limit)).fetchall()
     elif user["role"] == "manager":
-        rows = db.execute("SELECT * FROM customers WHERE name LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY name LIMIT ?",
+        rows = db.execute("SELECT * FROM customers WHERE name ILIKE ? ESCAPE '\\' ORDER BY name LIMIT ?",
                           ("%" + like_escape(q) + "%", limit)).fetchall()
     else:
         raise RuleError("Search by phone number (at least 4 digits).")
