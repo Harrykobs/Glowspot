@@ -50,7 +50,6 @@ class RulesTest(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
-        
 
     def cust(self, name, ref=""):
         self.n += 1
@@ -392,7 +391,6 @@ class ReportsTest(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
-        
 
     def test_report_contents(self):
         r = rpt.build(self.db, "customers", self.args)
@@ -445,7 +443,7 @@ class WebTest(unittest.TestCase):
         self.app = create_app({"DATABASE_URL": self.database_url, "TESTING": True, "SECRET_KEY": "test-secret"})
 
     def tearDown(self):
-        
+        pass
 
     def token(self, c, page="/"):
         return re.search(r'name="csrf_token" value="([^"]+)"', c.get(page).get_data(as_text=True)).group(1)
