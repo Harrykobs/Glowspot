@@ -4,7 +4,7 @@ Everything that changes money, referrals or commissions lives here so the rules
 are in one place and can be tested without the web layer.
 """
 import re
-import sqlite3
+import psycopg
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -173,7 +173,7 @@ def create_user(db, actor, username, full_name, role, password):
             "INSERT INTO users(username,full_name,password_hash,role,active,must_change_password,created_at)"
             " VALUES(?,?,?,?,1,1,?)",
             (username, full_name, generate_password_hash(password), role, now_utc()))
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         raise RuleError("That username is already taken.")
     audit(db, actor, "user_created", "user", cur.lastrowid, f"{username} ({role})")
     return cur.lastrowid
