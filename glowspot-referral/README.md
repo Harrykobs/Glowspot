@@ -36,7 +36,7 @@ The production database is remote PostgreSQL hosted by Supabase. Create and down
 
 ## Tests
 
-Run `python -m unittest discover -s tests -v`. PostgreSQL integration tests require a dedicated test database configured through `DATABASE_URL`; never point tests at the live production database.
+Run `python -m unittest discover -s tests -v`. PostgreSQL integration tests require a dedicated disposable test database configured through `TEST_DATABASE_URL`; never point tests at the live production database.
 
 ## Documentation
 
