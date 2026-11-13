@@ -32,7 +32,7 @@ def create_app(config=None):
 
     app.config.update(
         SECRET_KEY=secret,
-        DATABASE=os.environ.get("DATABASE_PATH", os.path.join(app.instance_path, "glowspot.db")),
+        DATABASE_URL=os.environ.get("DATABASE_URL"),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=prod,
@@ -43,6 +43,8 @@ def create_app(config=None):
     )
     if config:
         app.config.update(config)
+    if prod and not app.config.get("DATABASE_URL"):
+        raise RuntimeError("DATABASE_URL must be set to the Supabase PostgreSQL connection string in production.")
     if os.environ.get("TRUST_PROXY") == "1":
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
@@ -134,7 +136,7 @@ def create_app(config=None):
 
 def _bootstrap(app):
     """Create the database, and optionally the first manager / demo data from environment variables."""
-    conn = dbm.connect(app.config["DATABASE"])
+    conn = dbm.connect(app.config["DATABASE_URL"])
     try:
         dbm.init_db(conn)
         if conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"] == 0:
