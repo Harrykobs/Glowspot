@@ -1,5 +1,13 @@
-"""Database layer (SQLite). All SQL is parameterised."""
-import sqlite3
+"""PostgreSQL database layer for Supabase.
+
+The application uses a small DB-API compatibility wrapper so existing parameterised
+queries can be migrated incrementally. PostgreSQL is the production database.
+"""
+from pathlib import Path
+import re
+
+import psycopg
+from psycopg.rows import dict_row
 from flask import g, current_app
 
 DEFAULT_SETTINGS = {
@@ -10,146 +18,85 @@ DEFAULT_SETTINGS = {
     "min_referrals_for_discount": ("2", "Qualifying referrals needed for the returning-customer price"),
 }
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users(
-  id INTEGER PRIMARY KEY,
-  username TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  full_name TEXT NOT NULL,
-  password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK(role IN ('staff','manager')),
-  active INTEGER NOT NULL DEFAULT 1,
-  must_change_password INTEGER NOT NULL DEFAULT 0,
-  failed_logins INTEGER NOT NULL DEFAULT 0,
-  locked_until TEXT,
-  created_at TEXT NOT NULL,
-  last_login TEXT
-);
-CREATE TABLE IF NOT EXISTS customers(
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  phone TEXT NOT NULL UNIQUE,
-  referrer_id INTEGER REFERENCES customers(id),
-  registered_at TEXT NOT NULL,
-  registered_by INTEGER NOT NULL REFERENCES users(id),
-  is_demo INTEGER NOT NULL DEFAULT 0,
-  CHECK(referrer_id IS NULL OR referrer_id <> id)
-);
-CREATE INDEX IF NOT EXISTS idx_customers_referrer ON customers(referrer_id);
-CREATE TABLE IF NOT EXISTS referral_changes(
-  id INTEGER PRIMARY KEY,
-  customer_id INTEGER NOT NULL REFERENCES customers(id),
-  old_referrer_id INTEGER REFERENCES customers(id),
-  new_referrer_id INTEGER REFERENCES customers(id),
-  reason TEXT NOT NULL,
-  changed_by INTEGER NOT NULL REFERENCES users(id),
-  changed_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS settings(
-  key TEXT PRIMARY KEY, value TEXT NOT NULL, label TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS settings_history(
-  id INTEGER PRIMARY KEY, key TEXT NOT NULL, old_value TEXT, new_value TEXT NOT NULL,
-  reason TEXT NOT NULL, changed_by INTEGER NOT NULL REFERENCES users(id), changed_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS packages(
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE COLLATE NOCASE,
-  price INTEGER NOT NULL CHECK(price > 0),
-  active INTEGER NOT NULL DEFAULT 1
-);
-CREATE TABLE IF NOT EXISTS sales(
-  id INTEGER PRIMARY KEY,
-  customer_id INTEGER NOT NULL REFERENCES customers(id),
-  kind TEXT NOT NULL CHECK(kind IN ('skin','package')),
-  item_name TEXT NOT NULL,
-  original_price INTEGER NOT NULL,
-  discount INTEGER NOT NULL DEFAULT 0,
-  amount_due INTEGER NOT NULL,
-  is_first_skin INTEGER NOT NULL DEFAULT 0,
-  price_note TEXT,
-  service_date TEXT NOT NULL,
-  recorded_by INTEGER NOT NULL REFERENCES users(id),
-  created_at TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','voided')),
-  void_reason TEXT, voided_by INTEGER REFERENCES users(id), voided_at TEXT,
-  CHECK(discount >= 0 AND amount_due > 0 AND amount_due = original_price - discount)
-);
-CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales(customer_id);
-CREATE TABLE IF NOT EXISTS payments(
-  id INTEGER PRIMARY KEY,
-  sale_id INTEGER NOT NULL REFERENCES sales(id),
-  amount INTEGER NOT NULL CHECK(amount > 0),
-  method TEXT NOT NULL CHECK(method IN ('Cash','Mobile money','Bank transfer','Card')),
-  paid_on TEXT NOT NULL,
-  recorded_by INTEGER NOT NULL REFERENCES users(id),
-  created_at TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'confirmed' CHECK(status IN ('confirmed','reversed')),
-  reversed_reason TEXT, reversed_by INTEGER REFERENCES users(id), reversed_at TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_payments_sale ON payments(sale_id);
-CREATE TABLE IF NOT EXISTS payouts(
-  id INTEGER PRIMARY KEY,
-  referrer_id INTEGER NOT NULL REFERENCES customers(id),
-  amount INTEGER NOT NULL,
-  method TEXT NOT NULL CHECK(method IN ('Cash','Mobile money','Bank transfer','Card')),
-  paid_on TEXT NOT NULL,
-  recorded_by INTEGER NOT NULL REFERENCES users(id),
-  created_at TEXT NOT NULL,
-  note TEXT
-);
-CREATE TABLE IF NOT EXISTS commissions(
-  id INTEGER PRIMARY KEY,
-  referrer_id INTEGER NOT NULL REFERENCES customers(id),
-  referred_id INTEGER NOT NULL REFERENCES customers(id),
-  sale_id INTEGER NOT NULL REFERENCES sales(id),
-  payment_id INTEGER REFERENCES payments(id),
-  kind TEXT NOT NULL CHECK(kind IN ('skin_reward','package_commission','adjustment')),
-  base_amount INTEGER NOT NULL,
-  rate_label TEXT NOT NULL,
-  amount INTEGER NOT NULL,
-  earned_at TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('Pending','Approved','Paid','Reversed')),
-  approved_by INTEGER REFERENCES users(id), approved_at TEXT,
-  payout_id INTEGER REFERENCES payouts(id),
-  reverses_id INTEGER REFERENCES commissions(id),
-  reversed_at TEXT, reversed_by INTEGER REFERENCES users(id), reversal_reason TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_comm_referrer ON commissions(referrer_id);
-CREATE INDEX IF NOT EXISTS idx_comm_sale ON commissions(sale_id);
--- One active first-skin-analysis reward per referred customer (database-level guard).
-CREATE UNIQUE INDEX IF NOT EXISTS uq_skin_reward ON commissions(referred_id)
-  WHERE kind='skin_reward' AND reversed_at IS NULL;
--- One package commission per confirmed payment.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_pkg_commission ON commissions(payment_id)
-  WHERE kind='package_commission';
-CREATE TABLE IF NOT EXISTS audit(
-  id INTEGER PRIMARY KEY,
-  user_id INTEGER, username TEXT,
-  action TEXT NOT NULL, entity TEXT, entity_id INTEGER,
-  detail TEXT, reason TEXT, created_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_audit_created ON audit(created_at);
-CREATE VIEW IF NOT EXISTS sale_totals AS
-  SELECT s.id AS sale_id, s.customer_id, s.kind, s.amount_due, s.status, s.service_date, s.is_first_skin,
-         COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.sale_id=s.id AND p.status='confirmed'),0) AS paid
-  FROM sales s;
--- A "qualifying paid visit": package with a confirmed payment, or skin analysis paid in full.
-CREATE VIEW IF NOT EXISTS qualifying_sales AS
-  SELECT * FROM sale_totals
-  WHERE status='active' AND ((kind='package' AND paid>0) OR (kind='skin' AND paid>=amount_due));
-"""
+
+class Cursor:
+    def __init__(self, cursor, lastrowid=None):
+        self._cursor = cursor
+        self.lastrowid = lastrowid
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def __iter__(self):
+        return iter(self._cursor)
 
 
-def connect(path):
-    conn = sqlite3.connect(path, timeout=15)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+class Connection:
+    def __init__(self, conn):
+        self._conn = conn
+
+    @staticmethod
+    def _sql(sql):
+        sql = sql.replace("COLLATE NOCASE", "")
+        sql = re.sub(r"INSERT\\s+OR\\s+IGNORE\\s+INTO", "INSERT INTO", sql, flags=re.I)
+        # SQLite's rowid was only used to order the settings table.
+        sql = re.sub(r"ORDER\\s+BY\\s+rowid\\b", "ORDER BY key", sql, flags=re.I)
+        # SQLite date(value, '+3 hours') expressions used by reports.
+        sql = re.sub(r"date\\(([^,()]+),\\s*'\\+3 hours'\\)", r"((\\1)::timestamp + INTERVAL '3 hours')::date", sql, flags=re.I)
+        return sql.replace("?", "%s")
+
+    def execute(self, sql, params=()):
+        sql = self._sql(sql)
+        match = re.match(r"\\s*INSERT\\s+INTO\\s+([a-z_]+)", sql, flags=re.I)
+        wants_id = bool(match and not re.search(r"\\bRETURNING\\b", sql, flags=re.I))
+        if wants_id:
+            sql = sql.rstrip().rstrip(";") + " RETURNING id"
+        cur = self._conn.cursor()
+        cur.execute(sql, params or ())
+        lastrowid = None
+        if wants_id:
+            row = cur.fetchone()
+            lastrowid = row["id"] if row else None
+            cur = self._conn.cursor()
+        return Cursor(cur, lastrowid)
+
+    def executemany(self, sql, seq):
+        cur = self._conn.cursor()
+        cur.executemany(self._sql(sql), seq)
+        return Cursor(cur)
+
+    def executescript(self, script):
+        cur = self._conn.cursor()
+        cur.execute(script)
+        return Cursor(cur)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+
+def connect(database_url):
+    if not database_url:
+        raise RuntimeError("DATABASE_URL must be configured. Set it to your Supabase PostgreSQL connection string.")
+    conn = psycopg.connect(database_url, connect_timeout=15, row_factory=dict_row)
+    return Connection(conn)
 
 
 def get_db():
     if "db" not in g:
-        g.db = connect(current_app.config["DATABASE"])
+        g.db = connect(current_app.config["DATABASE_URL"])
     return g.db
 
 
@@ -162,10 +109,14 @@ def close_db(exc=None):
 
 
 def init_db(conn):
-    """Create tables if missing and insert default settings. Safe to run repeatedly."""
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.executescript(SCHEMA)
+    """Apply the versioned PostgreSQL schema and ensure default settings exist."""
+    schema_path = Path(__file__).resolve().parent.parent / "migrations" / "001_postgres_schema.sql"
+    if not schema_path.exists():
+        raise RuntimeError(f"PostgreSQL schema migration not found: {schema_path}")
+    conn.executescript(schema_path.read_text(encoding="utf-8"))
     for key, (value, label) in DEFAULT_SETTINGS.items():
-        conn.execute("INSERT OR IGNORE INTO settings(key,value,label) VALUES(?,?,?)", (key, value, label))
-    conn.execute("PRAGMA user_version=1")
+        conn.execute(
+            "INSERT INTO settings(key,value,label) VALUES(?,?,?) ON CONFLICT (key) DO NOTHING",
+            (key, value, label),
+        )
     conn.commit()
