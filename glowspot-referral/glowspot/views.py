@@ -1,11 +1,10 @@
 """Web routes."""
 import os
 import secrets
-import tempfile
 from functools import wraps
 
 from flask import (Blueprint, abort, after_this_request, flash, g, jsonify, redirect, render_template,
-                   request, send_file, session, url_for, Response)
+                   request, session, url_for, Response)
 
 from . import db as dbm
 from . import reports as rpt
@@ -310,9 +309,9 @@ def commissions():
         where.append("(r.name LIKE ? ESCAPE '\\' OR r.phone LIKE ? ESCAPE '\\')")
         p += [like, "%" + svc.like_escape(digits.lstrip("0") or "zzz") + "%"]
     if a.get("start"):
-        where.append("date(m.earned_at,'+3 hours')>=?"); p.append(a["start"])
+        where.append("((m.earned_at::timestamp + INTERVAL '3 hours')::date)>=?"); p.append(a["start"])
     if a.get("end"):
-        where.append("date(m.earned_at,'+3 hours')<=?"); p.append(a["end"])
+        where.append("((m.earned_at::timestamp + INTERVAL '3 hours')::date)<=?"); p.append(a["end"])
     rows = db.execute(
         "SELECT m.*, r.name referrer_name, r.phone referrer_phone, c.name referred_name, x.item_name FROM commissions m "
         "JOIN customers r ON r.id=m.referrer_id JOIN customers c ON c.id=m.referred_id JOIN sales x ON x.id=m.sale_id "
@@ -420,7 +419,7 @@ def settings():
         except RuleError as e:
             db.rollback()
             flash(str(e), "error")
-    rows = db.execute("SELECT * FROM settings ORDER BY rowid").fetchall()
+    rows = db.execute("SELECT * FROM settings ORDER BY key").fetchall()
     hist = db.execute("SELECT h.*, s.label, u.full_name by_name FROM settings_history h JOIN settings s ON s.key=h.key "
                       "JOIN users u ON u.id=h.changed_by ORDER BY h.id DESC LIMIT 50").fetchall()
     return render_template("settings.html", rows=rows, hist=hist)
@@ -509,24 +508,6 @@ def backup():
 @bp.route("/backup/download", methods=["POST"])
 @manager_required
 def backup_download():
-    import sqlite3
-    fd, tmp = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    src = dbm.connect(os.path.abspath(d().execute("PRAGMA database_list").fetchone()["file"]))
-    dst = sqlite3.connect(tmp)
-    src.backup(dst)
-    dst.close()
-    src.close()
-    svc.audit(d(), g.user, "backup_downloaded", "database")
-    d().commit()
-
-    @after_this_request
-    def cleanup(resp):
-        try:
-            os.remove(tmp)
-        except OSError:
-            pass
-        return resp
-
-    stamp = svc.now_utc().replace(" ", "_").replace(":", "")
-    return send_file(tmp, mimetype="application/octet-stream", as_attachment=True, download_name=f"glowspot-backup-{stamp}.db")
+    # PostgreSQL backups are managed through Supabase or pg_dump.
+    flash("Use the Supabase dashboard database backup/export tools for PostgreSQL backups.", "error")
+    return redirect(url_for("main.backup"))

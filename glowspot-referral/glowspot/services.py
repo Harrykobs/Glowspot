@@ -4,7 +4,7 @@ Everything that changes money, referrals or commissions lives here so the rules
 are in one place and can be tested without the web layer.
 """
 import re
-import sqlite3
+import psycopg
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -173,7 +173,7 @@ def create_user(db, actor, username, full_name, role, password):
             "INSERT INTO users(username,full_name,password_hash,role,active,must_change_password,created_at)"
             " VALUES(?,?,?,?,1,1,?)",
             (username, full_name, generate_password_hash(password), role, now_utc()))
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         raise RuleError("That username is already taken.")
     audit(db, actor, "user_created", "user", cur.lastrowid, f"{username} ({role})")
     return cur.lastrowid
@@ -252,7 +252,7 @@ def register_customer(db, user, name, phone_raw, referrer_phone_raw="", is_demo=
         cur = db.execute(
             "INSERT INTO customers(name,phone,referrer_id,registered_at,registered_by,is_demo) VALUES(?,?,?,?,?,?)",
             (name, phone, referrer_id, now_utc(), user["id"], 1 if is_demo else 0))
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         ex = db.execute("SELECT id,name FROM customers WHERE phone=?", (phone,)).fetchone()
         raise RuleError("This phone number already belongs to another customer.", customer_id=ex["id"] if ex else None)
     audit(db, user, "customer_registered", "customer", cur.lastrowid,
@@ -277,7 +277,7 @@ def search_customers(db, q, user, limit=15):
         rows = db.execute("SELECT * FROM customers WHERE phone LIKE ? ESCAPE '\\' ORDER BY name LIMIT ?",
                           ("%" + like_escape(digits) + "%", limit)).fetchall()
     elif user["role"] == "manager":
-        rows = db.execute("SELECT * FROM customers WHERE name LIKE ? ESCAPE '\\' COLLATE NOCASE ORDER BY name LIMIT ?",
+        rows = db.execute("SELECT * FROM customers WHERE name ILIKE ? ESCAPE '\\' ORDER BY name LIMIT ?",
                           ("%" + like_escape(q) + "%", limit)).fetchall()
     else:
         raise RuleError("Search by phone number (at least 4 digits).")
@@ -612,7 +612,7 @@ def save_package(db, user, package_id, name, price_raw, active):
         else:
             cur = db.execute("INSERT INTO packages(name,price,active) VALUES(?,?,1)", (name, price))
             audit(db, user, "package_created", "package", cur.lastrowid, f"{name} {price}")
-    except sqlite3.IntegrityError:
+    except psycopg.IntegrityError:
         raise RuleError("A package with that name already exists.")
 
 
