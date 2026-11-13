@@ -47,12 +47,12 @@ class Connection:
         # Existing application SQL uses DB-API question-mark placeholders.
         # PostgreSQL does not support SQLite's NOCASE collation or rowid alias.
         sql = sql.replace('COLLATE NOCASE', '')
-        sql = re.sub(r'ORDER\\s+BY\\s+rowid\\b', 'ORDER BY key', sql, flags=re.I)
+        sql = re.sub(r'ORDER\s+BY\s+rowid\b', 'ORDER BY key', sql, flags=re.I)
         return sql.replace('?', '%s')
     def execute(self, sql, params=()):
         sql = self._sql(sql)
-        match = re.match(r"\\s*INSERT\\s+INTO\\s+([a-z_]+)", sql, flags=re.I)
-        wants_id = bool(match and match.group(1).lower() in {"users","customers","referral_changes","settings_history","packages","sales","payments","payouts","commissions","audit"} and not re.search(r"\\bRETURNING\\b", sql, flags=re.I))
+        match = re.match(r"\s*INSERT\s+INTO\s+([a-z_]+)", sql, flags=re.I)
+        wants_id = bool(match and match.group(1).lower() in {"users","customers","referral_changes","settings_history","packages","sales","payments","payouts","commissions","audit"} and not re.search(r"\bRETURNING\b", sql, flags=re.I))
         if wants_id:
             sql = sql.rstrip().rstrip(";") + " RETURNING id"
         cur = self._conn.cursor()
