@@ -80,8 +80,13 @@ class Connection:
         return Cursor(cur)
 
     def executescript(self, script):
+        """Execute a trusted schema script containing multiple PostgreSQL statements.
+
+        Psycopg uses the simple-query protocol for multi-statement scripts when
+        prepare=False and no bound parameters are supplied.
+        """
         cur = self._conn.cursor()
-        cur.execute(script)
+        cur.execute(script, prepare=False)
         return Cursor(cur)
 
     def commit(self):
@@ -120,10 +125,14 @@ def init_db(conn):
     schema_path = Path(__file__).resolve().parent.parent / "migrations" / "001_postgres_schema.sql"
     if not schema_path.exists():
         raise RuntimeError(f"PostgreSQL schema migration not found: {schema_path}")
-    conn.executescript(schema_path.read_text(encoding="utf-8"))
-    for key, (value, label) in DEFAULT_SETTINGS.items():
-        conn.execute(
-            "INSERT INTO settings(key,value,label) VALUES(?,?,?) ON CONFLICT (key) DO NOTHING",
-            (key, value, label),
-        )
-    conn.commit()
+    try:
+        conn.executescript(schema_path.read_text(encoding="utf-8"))
+        for key, (value, label) in DEFAULT_SETTINGS.items():
+            conn.execute(
+                "INSERT INTO settings(key,value,label) VALUES(?,?,?) ON CONFLICT (key) DO NOTHING",
+                (key, value, label),
+            )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
