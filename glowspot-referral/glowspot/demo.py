@@ -19,7 +19,7 @@ def seed_demo(conn):
     manager = conn.execute("SELECT * FROM users WHERE username='demo.manager'").fetchone()
     staff = conn.execute("SELECT * FROM users WHERE username='demo.staff'").fetchone()
     for name, price in (("Glow Basic Package (demo)", 60000), ("Radiance Package (demo)", 100000), ("Complete Care Package (demo)", 180000)):
-        conn.execute("INSERT OR IGNORE INTO packages(name,price,active) VALUES(?,?,1)", (name, price))
+        conn.execute("INSERT INTO packages(name,price,active) VALUES(?,?,1) ON CONFLICT DO NOTHING", (name, price))
     rad = conn.execute("SELECT id FROM packages WHERE name LIKE 'Radiance%'").fetchone()["id"]
     reg = lambda n, p, ref="": svc.register_customer(conn, staff, n, p, ref, is_demo=1)
     a = reg("Amina Test", "0700000001")
