@@ -1,33 +1,42 @@
 #!/usr/bin/env python3
-"""Restore the database from a backup file.  STOP THE APP FIRST.
+"""Restore a PostgreSQL custom-format backup.
 
-Usage:  python scripts/restore.py BACKUP_FILE [--db PATH]
-The current database is kept as <db>.before-restore-<time> in case you restored the wrong file.
+Requires DATABASE_URL and PostgreSQL client tools. This operation can replace
+objects in the target database. It refuses to run without --confirm.
+Take and verify a fresh backup before restoring.
 """
 import argparse
 import os
 import shutil
-import sqlite3
+import subprocess
 import sys
-from datetime import datetime
+from pathlib import Path
 
-p = argparse.ArgumentParser()
-p.add_argument("backup")
-p.add_argument("--db", default=os.environ.get("DATABASE_PATH", "instance/glowspot.db"))
-a = p.parse_args()
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("backup", help="pg_dump custom-format .dump file")
+parser.add_argument("--confirm", action="store_true", help="confirm that the target database may be modified")
+args = parser.parse_args()
+
+database_url = os.environ.get("DATABASE_URL")
+if not database_url:
+    sys.exit("DATABASE_URL is required; configure the intended Supabase PostgreSQL database.")
+if not args.confirm:
+    sys.exit("Restore not run. Review the target database and repeat with --confirm.")
+backup = Path(args.backup)
+if not backup.is_file():
+    sys.exit(f"Backup file not found: {backup}")
+pg_restore = shutil.which("pg_restore")
+if not pg_restore:
+    sys.exit("PostgreSQL client tool pg_restore must be installed.")
+
 try:
-    c = sqlite3.connect(a.backup)
-    assert c.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-    c.execute("SELECT COUNT(*) FROM customers"); c.execute("SELECT COUNT(*) FROM commissions")
-    c.close()
-except Exception as e:  # noqa: BLE001
-    sys.exit(f"That file is not a valid Glowspot backup: {e}")
-if os.path.exists(a.db):
-    keep = a.db + ".before-restore-" + datetime.now().strftime("%Y%m%d-%H%M%S")
-    shutil.copy2(a.db, keep)
-    print("Current database saved as", keep)
-for ext in ("-wal", "-shm"):
-    if os.path.exists(a.db + ext):
-        os.remove(a.db + ext)
-shutil.copy2(a.backup, a.db)
-print("Restored", a.db, "from", a.backup, ". Start the app again.")
+    with backup.open("rb") as backup_file:
+        subprocess.run([pg_restore, "--list"], stdin=backup_file, stdout=subprocess.DEVNULL, check=True)
+    subprocess.run([
+        pg_restore, "--exit-on-error", "--clean", "--if-exists", "--no-owner", "--no-acl",
+        "--dbname", database_url, str(backup),
+    ], check=True)
+except (OSError, subprocess.CalledProcessError) as exc:
+    sys.exit(f"PostgreSQL restore failed; inspect the database before retrying: {exc}")
+
+print(f"Restore completed from {backup}. Verify application workflows before reopening service.")
