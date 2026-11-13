@@ -309,7 +309,7 @@ def commissions():
         where.append("(r.name LIKE ? ESCAPE '\\' OR r.phone LIKE ? ESCAPE '\\')")
         p += [like, "%" + svc.like_escape(digits.lstrip("0") or "zzz") + "%"]
     if a.get("start"):
-        where.append("date(m.earned_at,'+3 hours')>=?"); p.append(a["start"])
+        where.append("((m.earned_at::timestamp + INTERVAL '3 hours')::date)>=?"); p.append(a["start"])
     if a.get("end"):
         where.append("date(m.earned_at,'+3 hours')<=?"); p.append(a["end"])
     rows = db.execute(
