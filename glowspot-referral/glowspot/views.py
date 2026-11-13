@@ -311,7 +311,7 @@ def commissions():
     if a.get("start"):
         where.append("((m.earned_at::timestamp + INTERVAL '3 hours')::date)>=?"); p.append(a["start"])
     if a.get("end"):
-        where.append("date(m.earned_at,'+3 hours')<=?"); p.append(a["end"])
+        where.append("((m.earned_at::timestamp + INTERVAL '3 hours')::date)<=?"); p.append(a["end"])
     rows = db.execute(
         "SELECT m.*, r.name referrer_name, r.phone referrer_phone, c.name referred_name, x.item_name FROM commissions m "
         "JOIN customers r ON r.id=m.referrer_id JOIN customers c ON c.id=m.referred_id JOIN sales x ON x.id=m.sale_id "
