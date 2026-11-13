@@ -5,8 +5,7 @@ Run:  python -m unittest discover -s tests -v
 import io
 import os
 import re
-import sqlite3
-import tempfile
+import psycopg
 import unittest
 import zipfile
 from datetime import timedelta
@@ -23,19 +22,26 @@ PW = "Test-Pass-123"
 
 
 def make_db():
-    path = tempfile.mktemp(suffix=".db")
-    conn = dbm.connect(path)
+    """Use an explicitly dedicated PostgreSQL test database; never fall back to SQLite."""
+    database_url = os.environ.get("TEST_DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("Set TEST_DATABASE_URL to a dedicated disposable PostgreSQL test database.")
+    conn = dbm.connect(database_url)
     dbm.init_db(conn)
+    conn.execute(
+        "TRUNCATE TABLE audit, commissions, payouts, payments, sales, packages, "
+        "settings_history, referral_changes, customers, users, settings RESTART IDENTITY CASCADE"
+    )
     for u, r in (("mgr", "manager"), ("stf", "staff")):
         conn.execute("INSERT INTO users(username,full_name,password_hash,role,active,must_change_password,created_at)"
                      " VALUES(?,?,?,?,1,0,?)", (u, u.upper(), generate_password_hash(PW), r, svc.now_utc()))
     conn.commit()
-    return path, conn
+    return database_url, conn
 
 
 class RulesTest(unittest.TestCase):
     def setUp(self):
-        self.path, self.db = make_db()
+        self.database_url, self.db = make_db()
         self.mgr = self.db.execute("SELECT * FROM users WHERE username='mgr'").fetchone()
         self.stf = self.db.execute("SELECT * FROM users WHERE username='stf'").fetchone()
         self.db.execute("INSERT INTO packages(name,price) VALUES('Radiance',100000)")
@@ -44,7 +50,7 @@ class RulesTest(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
-        os.remove(self.path)
+        
 
     def cust(self, name, ref=""):
         self.n += 1
@@ -106,7 +112,7 @@ class RulesTest(unittest.TestCase):
         sale2, awards = self.skin(b)  # second skin analysis (returning) earns nothing
         self.assertEqual(awards, [])
         self.assertEqual(self.unpaid(a), 2000)
-        with self.assertRaises(sqlite3.IntegrityError):  # database-level guard
+        with self.assertRaises(psycopg.IntegrityError):  # database-level guard
             self.db.execute("INSERT INTO commissions(referrer_id,referred_id,sale_id,kind,base_amount,rate_label,amount,earned_at,status)"
                             " VALUES(?,?,1,'skin_reward',15000,'Fixed',2000,'2026-01-01 00:00:00','Pending')", (a, b))
 
@@ -430,13 +436,13 @@ class ReportsTest(unittest.TestCase):
 
 class WebTest(unittest.TestCase):
     def setUp(self):
-        self.path, conn = make_db()
+        self.database_url, conn = make_db()
         conn.execute("INSERT INTO packages(name,price) VALUES('Radiance',100000)")
         conn.execute("INSERT INTO users(username,full_name,password_hash,role,active,must_change_password,created_at)"
                      " VALUES('fresh','Fresh User',?,'staff',1,1,?)", (generate_password_hash(PW), svc.now_utc()))
         conn.commit()
         conn.close()
-        self.app = create_app({"DATABASE": self.path, "TESTING": True, "SECRET_KEY": "test-secret"})
+        self.app = create_app({"DATABASE_URL": self.database_url, "TESTING": True, "SECRET_KEY": "test-secret"})
 
     def tearDown(self):
         os.remove(self.path)
@@ -488,7 +494,7 @@ class WebTest(unittest.TestCase):
     def test_disabled_user_loses_access_immediately(self):
         c, _ = self.login("stf")
         self.assertEqual(c.get("/").status_code, 200)
-        conn = dbm.connect(self.path)
+        conn = dbm.connect(self.database_url)
         conn.execute("UPDATE users SET active=0 WHERE username='stf'")
         conn.commit()
         conn.close()
