@@ -16,6 +16,11 @@ class HybridRow(dict):
 
 
 def hybrid_row(cursor):
+    # PostgreSQL commands such as CREATE TABLE have no result description.
+    # They never produce rows, but psycopg still asks the row factory to
+    # provide a maker while processing the command result.
+    if cursor.description is None:
+        return lambda values: values
     names = [column.name for column in cursor.description]
     return lambda values: HybridRow(zip(names, values))
 from flask import g, current_app
