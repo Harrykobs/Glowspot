@@ -141,6 +141,8 @@ def _bootstrap(app):
         dbm.init_db(conn)
         if conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"] == 0:
             pw = os.environ.get("INITIAL_ADMIN_PASSWORD")
+            if not pw and app.config["PRODUCTION"]:
+                raise RuntimeError("Set INITIAL_ADMIN_PASSWORD in Render before starting a fresh production database.")
             if pw:
                 username = os.environ.get("INITIAL_ADMIN_USERNAME", "admin")
                 svc.validate_password(pw, username)
