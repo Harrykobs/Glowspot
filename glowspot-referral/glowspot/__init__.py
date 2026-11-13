@@ -37,7 +37,7 @@ def create_app(config=None):
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=prod,
         PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
-        MAX_CONTENT_LENGTH=1024 * 1024,
+        MAX_CONTENT_LENGTH=1024 *  1024,
         PRODUCTION=prod,
         TEST_BANNER=os.environ.get("TEST_BANNER", ""),
     )
@@ -51,7 +51,6 @@ def create_app(config=None):
     app.teardown_appcontext(dbm.close_db)
     _bootstrap(app)
 
-    # ------------------------------------------------------------ request hooks
     @app.before_request
     def load_user_and_check_csrf():
         if request.endpoint == "static":
@@ -91,7 +90,6 @@ def create_app(config=None):
         return {"csrf_token": session["csrf"], "METHODS": svc.METHODS, "banner": app.config["TEST_BANNER"],
                 "today": svc.today_eat().isoformat()}
 
-    # ------------------------------------------------------------ filters
     @app.template_filter("tzs")
     def tzs(n):
         return "-" if n is None else (f"-TZS {abs(int(n)):,}" if int(n) < 0 else f"TZS {int(n):,}")
@@ -118,7 +116,6 @@ def create_app(config=None):
         except (TypeError, ValueError):
             return s or ""
 
-    # ------------------------------------------------------------ errors
     def _err(code, title, msg):
         return render_template("error.html", code=code, title=title, msg=msg), code
 
@@ -135,23 +132,24 @@ def create_app(config=None):
 
 
 def _bootstrap(app):
-    """Create the database, and optionally the first manager / demo data from environment variables."""
+    """Create the database and optionally bootstrap the first manager."""
     conn = dbm.connect(app.config["DATABASE_URL"])
     try:
         dbm.init_db(conn)
         if conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"] == 0:
             pw = os.environ.get("INITIAL_ADMIN_PASSWORD")
             if not pw and app.config["PRODUCTION"]:
-                raise RuntimeError("Set INITIAL_ADMIN_PASSWORD in Render before starting a fresh production database.")
+                raise RuntimeError("Set INITIAL_ADMIN_PASSWORD before starting a fresh production database.")
             if pw:
                 username = os.environ.get("INITIAL_ADMIN_USERNAME", "admin")
                 svc.validate_password(pw, username)
                 conn.execute(
                     "INSERT INTO users(username,full_name,password_hash,role,active,must_change_password,created_at)"
                     " VALUES(?,?,?,?,1,1,?)",
-                    (username, os.environ.get("INITIAL_ADMIN_NAME", "Shop Manager"), generate_password_hash(pw), "manager", svc.now_utc()))
+                    (username, os.environ.get("INITIAL_ADMIN_NAME", "Shop Manager"),
+                     generate_password_hash(pw), "manager", svc.now_utc()))
                 conn.commit()
-        if os.environ.get("SEED_DEMO") == "1":
+        if os.environ.get("SEED_DEMO") == "1" and not app.config["PRODUCTION"]:
             from .demo import seed_demo
             seed_demo(conn)
     finally:
@@ -161,10 +159,12 @@ def _bootstrap(app):
 def _register_cli(app):
     @app.cli.command("init-db")
     def init_db_cmd():
-        """Create tables and default settings."""
-        conn = dbm.connect(app.config["DATABASE"])
-        dbm.init_db(conn)
-        conn.close()
+        """Create PostgreSQL tables and default settings."""
+        conn = dbm.connect(app.config["DATABASE_URL"])
+        try:
+            dbm.init_db(conn)
+        finally:
+            conn.close()
         click.echo("Database ready.")
 
     @app.cli.command("create-manager")
@@ -172,24 +172,30 @@ def _register_cli(app):
     @click.option("--name", prompt="Full name")
     @click.password_option()
     def create_manager(username, name, password):
-        """Create a manager account (use this to set up the first administrator)."""
-        conn = dbm.connect(app.config["DATABASE"])
+        """Create a manager account using the application's own authentication."""
+        conn = dbm.connect(app.config["DATABASE_URL"])
         try:
             svc.validate_password(password, username)
             conn.execute(
                 "INSERT INTO users(username,full_name,password_hash,role,active,must_change_password,created_at)"
-                " VALUES(?,?,?,?,1,0,?)", (username, name, generate_password_hash(password), "manager", svc.now_utc()))
+                " VALUES(?,?,?,?,1,0,?)",
+                (username, name, generate_password_hash(password), "manager", svc.now_utc()))
             conn.commit()
             click.echo("Manager created.")
-        except Exception as e:  # noqa: BLE001 - show any problem to the operator
+        except Exception as e:
+            conn.rollback()
             raise click.ClickException(str(e))
         finally:
             conn.close()
 
     @app.cli.command("seed-demo")
     def seed_demo_cmd():
-        """Add clearly-labelled synthetic demo data (for the temporary test site only)."""
+        """Add synthetic demo data only in non-production environments."""
+        if app.config["PRODUCTION"]:
+            raise click.ClickException("Demo seeding is disabled in production.")
         from .demo import seed_demo
-        conn = dbm.connect(app.config["DATABASE"])
-        click.echo(seed_demo(conn))
-        conn.close()
+        conn = dbm.connect(app.config["DATABASE_URL"])
+        try:
+            click.echo(seed_demo(conn))
+        finally:
+            conn.close()
