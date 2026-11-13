@@ -7,7 +7,17 @@ from pathlib import Path
 import re
 
 import psycopg
-from psycopg.rows import dict_row
+class HybridRow(dict):
+    """Dictionary row that also supports SQLite-style numeric column access."""
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return tuple(self.values())[key]
+        return super().__getitem__(key)
+
+
+def hybrid_row(cursor):
+    names = [column.name for column in cursor.description]
+    return lambda values: HybridRow(zip(names, values))
 from flask import g, current_app
 
 DEFAULT_SETTINGS = {
@@ -87,7 +97,7 @@ class Connection:
 def connect(database_url):
     if not database_url:
         raise RuntimeError("DATABASE_URL must be configured. Set it to your Supabase PostgreSQL connection string.")
-    conn = psycopg.connect(database_url, connect_timeout=15, row_factory=dict_row)
+    conn = psycopg.connect(database_url, connect_timeout=15, row_factory=hybrid_row)
     return Connection(conn)
 
 
