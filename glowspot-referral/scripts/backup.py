@@ -1,33 +1,51 @@
 #!/usr/bin/env python3
-"""Make a consistent backup of the database (safe while the app is running).
+"""Create a PostgreSQL custom-format backup using pg_dump.
 
-Usage:  python scripts/backup.py [--db PATH] [--out DIR] [--keep 30]
-Schedule it daily with cron, e.g.:  0 2 * * * cd /path/to/app && python scripts/backup.py
-Copy the backups OFF the server as well (another disk, Google Drive, etc).
+Requires DATABASE_URL and PostgreSQL client tools (pg_dump, pg_restore).
+Example: python scripts/backup.py --out backups --keep 30
+Keep backup files encrypted and off the application server.
 """
 import argparse
 import os
-import sqlite3
+import shutil
+import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
 
-p = argparse.ArgumentParser()
-p.add_argument("--db", default=os.environ.get("DATABASE_PATH", "instance/glowspot.db"))
-p.add_argument("--out", default="backups")
-p.add_argument("--keep", type=int, default=30, help="number of recent backups to keep")
-a = p.parse_args()
-if not os.path.exists(a.db):
-    sys.exit(f"Database not found: {a.db}")
-os.makedirs(a.out, exist_ok=True)
-dest = os.path.join(a.out, "glowspot-" + datetime.now().strftime("%Y%m%d-%H%M%S") + ".db")
-src, dst = sqlite3.connect(a.db), sqlite3.connect(dest)
-src.backup(dst)
-ok = dst.execute("PRAGMA integrity_check").fetchone()[0]
-src.close(); dst.close()
-if ok != "ok":
-    sys.exit(f"Backup failed integrity check: {ok}")
-os.chmod(dest, 0o600)
-old = sorted(f for f in os.listdir(a.out) if f.startswith("glowspot-") and f.endswith(".db"))[:-a.keep]
-for f in old:
-    os.remove(os.path.join(a.out, f))
-print("Backup written:", dest)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--out", default="backups")
+parser.add_argument("--keep", type=int, default=30)
+args = parser.parse_args()
+
+database_url = os.environ.get("DATABASE_URL")
+if not database_url:
+    sys.exit("DATABASE_URL is required; configure your Supabase PostgreSQL connection string.")
+if args.keep < 1:
+    sys.exit("--keep must be at least 1.")
+pg_dump = shutil.which("pg_dump")
+pg_restore = shutil.which("pg_restore")
+if not pg_dump or not pg_restore:
+    sys.exit("PostgreSQL client tools pg_dump and pg_restore must be installed.")
+
+out_dir = Path(args.out)
+out_dir.mkdir(parents=True, exist_ok=True)
+stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+destination = out_dir / f"glowspot-{stamp}.dump"
+try:
+    with destination.open("wb") as backup_file:
+        subprocess.run(
+            [pg_dump, "--format=custom", "--no-owner", "--no-acl", "--dbname", database_url],
+            stdout=backup_file, check=True,
+        )
+    with destination.open("rb") as backup_file:
+        subprocess.run([pg_restore, "--list"], stdin=backup_file, stdout=subprocess.DEVNULL, check=True)
+except (OSError, subprocess.CalledProcessError) as exc:
+    destination.unlink(missing_ok=True)
+    sys.exit(f"PostgreSQL backup failed: {exc}")
+
+os.chmod(destination, 0o600)
+old_backups = sorted(out_dir.glob("glowspot-*.dump"), key=lambda path: path.stat().st_mtime, reverse=True)
+for old in old_backups[args.keep:]:
+    old.unlink()
+print(f"Verified PostgreSQL backup written: {destination}")
