@@ -378,7 +378,7 @@ class RulesTest(unittest.TestCase):
 
 class ReportsTest(unittest.TestCase):
     def setUp(self):
-        self.path, self.db = make_db()
+        self.database_url, self.db = make_db()
         self.stf = self.db.execute("SELECT * FROM users WHERE username='stf'").fetchone()
         self.db.execute("INSERT INTO packages(name,price) VALUES('Radiance',100000)")
         a = svc.register_customer(self.db, self.stf, "Amina", "0700000001")
@@ -392,7 +392,7 @@ class ReportsTest(unittest.TestCase):
 
     def tearDown(self):
         self.db.close()
-        os.remove(self.path)
+        
 
     def test_report_contents(self):
         r = rpt.build(self.db, "customers", self.args)
@@ -445,7 +445,7 @@ class WebTest(unittest.TestCase):
         self.app = create_app({"DATABASE_URL": self.database_url, "TESTING": True, "SECRET_KEY": "test-secret"})
 
     def tearDown(self):
-        os.remove(self.path)
+        
 
     def token(self, c, page="/"):
         return re.search(r'name="csrf_token" value="([^"]+)"', c.get(page).get_data(as_text=True)).group(1)
