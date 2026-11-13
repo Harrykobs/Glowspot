@@ -21,9 +21,8 @@ services:
         sync: false
       - key: INITIAL_ADMIN_USERNAME
         value: admin
+      - key: INITIAL_ADMIN_NAME
+        value: Shop Manager
       - key: INITIAL_ADMIN_PASSWORD
         sync: false
-      - key: SEED_DEMO
-        value: "1"
-      - key: TEST_BANNER
-        value: "TEST SITE - synthetic data only"
+      # Demo data and test banners are intentionally disabled in production.
