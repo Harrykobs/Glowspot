@@ -5,7 +5,7 @@ from xml.sax.saxutils import escape
 
 from .services import RuleError, format_phone, today_eat
 
-REG_DATE = "date(c.registered_at,'+3 hours')"
+REG_DATE = "((c.registered_at::timestamp + INTERVAL '3 hours')::date)"
 
 
 def parse_range(args):
@@ -79,10 +79,10 @@ def sales_report(db, s, e, **_):
 
 def commissions_report(db, s, e, **_):
     q = db.execute(
-        "SELECT date(m.earned_at,'+3 hours') d, r.name rn, r.phone rp, c.name cn, m.kind, x.item_name, m.base_amount,"
+        "SELECT ((m.earned_at::timestamp + INTERVAL '3 hours')::date) d, r.name rn, r.phone rp, c.name cn, m.kind, x.item_name, m.base_amount,"
         "m.rate_label, m.amount, m.status FROM commissions m JOIN customers r ON r.id=m.referrer_id "
         "JOIN customers c ON c.id=m.referred_id JOIN sales x ON x.id=m.sale_id "
-        "WHERE date(m.earned_at,'+3 hours') BETWEEN ? AND ? ORDER BY m.earned_at, m.id", (s, e)).fetchall()
+        "WHERE ((m.earned_at::timestamp + INTERVAL '3 hours')::date) BETWEEN ? AND ? ORDER BY m.earned_at, m.id", (s, e)).fetchall()
     names = {"skin_reward": "Skin analysis reward", "package_commission": "Package commission", "adjustment": "Reversal adjustment"}
     rows = [[r["d"], r["rn"], format_phone(r["rp"]), r["cn"], names[r["kind"]], r["item_name"], r["base_amount"],
              r["rate_label"], r["amount"], r["status"]] for r in q]
@@ -136,12 +136,12 @@ def trend_report(db, s, e, group="day", **_):
     add("SELECT p.paid_on d, SUM(p.amount) v FROM payments p JOIN sales x ON x.id=p.sale_id WHERE p.status='confirmed' "
         "AND x.status='active' AND p.paid_on BETWEEN ? AND ? GROUP BY p.paid_on", (s, e), 1)
     add("SELECT service_date d, COUNT(*) v FROM sales WHERE status='active' AND service_date BETWEEN ? AND ? GROUP BY service_date", (s, e), 0)
-    add("SELECT date(registered_at,'+3 hours') d, COUNT(*) v FROM customers WHERE date(registered_at,'+3 hours') BETWEEN ? AND ? "
+    add("SELECT ((registered_at::timestamp + INTERVAL '3 hours')::date) d, COUNT(*) v FROM customers WHERE ((registered_at::timestamp + INTERVAL '3 hours')::date) BETWEEN ? AND ? "
         "GROUP BY 1", (s, e), 2)
-    add("SELECT date(registered_at,'+3 hours') d, COUNT(*) v FROM customers WHERE referrer_id IS NOT NULL AND "
-        "date(registered_at,'+3 hours') BETWEEN ? AND ? GROUP BY 1", (s, e), 3)
-    add("SELECT date(earned_at,'+3 hours') d, SUM(amount) v FROM commissions WHERE status IN ('Pending','Approved','Paid') "
-        "AND date(earned_at,'+3 hours') BETWEEN ? AND ? GROUP BY 1", (s, e), 4)
+    add("SELECT ((registered_at::timestamp + INTERVAL '3 hours')::date) d, COUNT(*) v FROM customers WHERE referrer_id IS NOT NULL AND "
+        "((registered_at::timestamp + INTERVAL '3 hours')::date) BETWEEN ? AND ? GROUP BY 1", (s, e), 3)
+    add("SELECT ((earned_at::timestamp + INTERVAL '3 hours')::date) d, SUM(amount) v FROM commissions WHERE status IN ('Pending','Approved','Paid') "
+        "AND ((earned_at::timestamp + INTERVAL '3 hours')::date) BETWEEN ? AND ? GROUP BY 1", (s, e), 4)
     rows = [[k, *v] for k, v in sorted(data.items())]
     return _rep("trend", f"Sales and referrals by {group}",
                 ["Period", "Sales recorded", "Amount collected (TZS)", "New customers", "Referred customers", "Commission earned (TZS)"],
